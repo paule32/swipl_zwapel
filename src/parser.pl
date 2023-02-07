@@ -14,7 +14,7 @@
 %% change: appLang(X) :- english(X). for English locale
 %% change: appLang(X) :- german(X).  for German  locale
 %% ---------------------------------------------------------------------------
-appLang(X) :- german(X).
+appLang(X) :- english(X).
 
 english(X) :- X = 1.
 german(X)  :- X = 2.
@@ -50,8 +50,6 @@ resource(floppy,  image, image('16x16/save.xpm')).
 :- set_prolog_flag(report_error,true).
 :- set_prolog_flag(unknown,error).		%% for unknown predicates
 
-variable(loaders,name,both,"runner").
-
 %% ---------------------------------------------------------------------------
 %% Entry Point init. jump
 %% ---------------------------------------------------------------------------
@@ -61,30 +59,22 @@ variable(loaders,name,both,"runner").
 %% display a localizated message for information, warning, error, or debug ...
 %% ---------------------------------------------------------------------------
 loc_message(HA,HB,X) :-
-	(HA == X -> write(HB);!).
+	(HA == X -> writeln(HB);!).
+
 %% ---------------------------------------------------------------------------
 %% X, and HA = message number, HB = message text.
 %% ---------------------------------------------------------------------------
 loc_message([(HA,HB)|T],X) :-
 	loc_message(HA,HB,X),true,!,
 	loc_message(T,X).
+
 %% ---------------------------------------------------------------------------
 %% for empty message lists, do nothing.
 %% ---------------------------------------------------------------------------
 loc_message([],_).
 loc_message(X) :-
-	%% ----------------------------------------------------------
-	%% get supported language lists for the application messages.
-	%% currently only: English, and German.
-	%% ----------------------------------------------------------
-	englishList(EnglishList),	% English.msg
-	germanList(GermanList), 	% German.msg
-	appLang(AppLang),
-	%% ----------------------------------------------------------
-	%% 1 = English, 2 = German.
-	%% ----------------------------------------------------------
-	(AppLang == 1 -> loc_message(EnglishList,X);
-	(AppLang == 2 -> loc_message(GermanList,X))),!.
+	messageList(MsgList),
+	loc_message(MsgList,X).
 
 %% ---------------------------------------------------------------------------
 %& error handling messages ...
@@ -119,11 +109,15 @@ main(Argv) :-
 	%% ---------------------------------------
 %%	foodid(2),
 	banner,
-	%% ---------------------------------------
-	%% load localization message files ...
-	%% ---------------------------------------
-	consult("English.msg"),
-	consult("German.msg"),
+
+	%% ----------------------------------------------------------
+	%% for each session load localization message file ...
+	%% 1 = English, 2 = German.
+	%% ----------------------------------------------------------
+	appLang(AppLang),
+	(AppLang == 1 -> consult('English.msg');
+	(AppLang == 2 -> consult('German.msg'))),!,
+
 	%% ---------------------------------------
 	%% get application arguments ...
 	%% ---------------------------------------
@@ -134,8 +128,8 @@ main(Argv) :-
 	(Argv == [] -> err_NoInputFile(E),loc_message(E),halt;!),
 	nth0(0,ListArgv,Argument0),
 
-	new(A,myapp),
-	send(A,destroy),
+	new(Application,myapp),
+	send(Application,destroy),
 	writeln('done'),
 	
 	%% ---------------------------------------
@@ -152,16 +146,20 @@ main(Argv) :-
 :- pce_begin_class(myapp,frame,"Frame").
 
 initialise(MyApp) :->
-	send_super(MyApp,initialise,'My Application'),
+	programTitle(AppTitle),
+	send_super(MyApp,initialise,AppTitle),
 	send(MyApp,append,new(D,dialog)),
-	send(D,scrollbars,both),
-	send(D,size,size(640,480)),
 	
 	send(D,append,new(menu_bar)),
 	send(D,append,new(tool_bar(MyApp))),
 	
 	send(MyApp,fill_menu_bar),
 	send(MyApp,fill_tool_bar),
+	
+	send(new(W,myapp_workspace),below,D),
+	send(W,scrollbars,both),
+	send(W,size,size(640,480)),
+	send(new(report_dialog),below,W),
 	
 	get(MyApp,confirm_centered,@nil).
 
@@ -171,12 +169,17 @@ initialise(MyApp) :->
 fill_menu_bar(F) :->
 	get(F,member,dialog,D),
 	get(D,member,menu_bar,MB),
+	
+	menuFile_Text(FileText),
+	menuHelp_Text(HelpText),
+	menuExitApp_Text(ExitAppText),
+	
 	send_list(MB,append,
-		[	new(File, popup('File'))
-	%%		new(Edit, popup('Edit'))
+		[	new(File, popup(FileText)),
+			new(Help, popup(HelpText))
 		]),	
 	send_list(File,append,
-		[	menu_item(destroyApp,message(F,destroyApp),'Exit Application')
+		[	menu_item(destroyApp,message(F,destroyApp),ExitAppText)
 		]).
 
 %% ---------------------------------------------------------------------------
@@ -185,9 +188,13 @@ fill_menu_bar(F) :->
 fill_tool_bar(F) :->
 	get(F,member,dialog,D),
 	get(D,member,tool_bar,TB),
+	
+	toolBarSave_Text(TBSave_Text),
+	toolBarSave_2_Text(TBSave_2_Text),
+
 	send_list(TB,append,
-		[	tool_button(destroyApp,image('16x16/save.xpm'),'hailao'),
-			tool_button(destroyApp,image('16x16/save.xpm'),'hailao sss')
+		[	tool_button(destroyApp,image('16x16/save.xpm'),TBSave_Text),
+			tool_button(destroyApp,image('16x16/save.xpm'),TBSave_2_Text)
 		]).
 
 %% ---------------------------------------------------------------------------
@@ -197,4 +204,8 @@ destroyApp(F) :->
 	get(F,member,dialog,D),
 	send(D,destroy).
 
-:- pce_end_class.
+:- pce_end_class(myapp).
+
+
+:- pce_begin_class(myapp_workspace, window).
+:- pce_end_class(myapp_workspace).
